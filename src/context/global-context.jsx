@@ -2,13 +2,12 @@ import * as React from "react";
 
 const GlobalContext = React.createContext();
 
-// Estado inicial mejor estructurado
 const initialState = {
-  messages: [],       // Historial de chats
-  currentChat: [],    // Chat actual en memoria
-  activeChatId: null, // ID del chat activo
-  loading: false,     // Estado de carga
-  error: null         // Manejo de errores
+  messages: [],       
+  currentChat: [],  
+  activeChatId: null, 
+  loading: false,     
+  error: null       
 };
 
 function globalReducer(state, action) {
