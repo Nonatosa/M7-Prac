@@ -2,52 +2,93 @@ import * as React from "react";
 
 const GlobalContext = React.createContext();
 
-const storage = {
-  messages: [],
-  currentChat: [],
+// Estado inicial mejor estructurado
+const initialState = {
+  messages: [],       // Historial de chats
+  currentChat: [],    // Chat actual en memoria
+  activeChatId: null, // ID del chat activo
+  loading: false,     // Estado de carga
+  error: null         // Manejo de errores
 };
 
 function globalReducer(state, action) {
   switch (action.type) {
-    // guarda el chat actual en el historial
     case "@save_history": {
-
-      if (!state.currentChat?.length) return state
-      const prev = localStorage.getItem("history");
-      const messages = prev ? JSON.parse(prev) : [];
-
+      if (!state.currentChat?.length) return state;
+      
+      const chatId = state.activeChatId || Date.now();
+      const prevChats = JSON.parse(localStorage.getItem("history")) || [];
+      
       const newChat = {
-        // obtenemos el primer mensaje del chat como titulo
-        title: state.currentChat[0].text,
-        content: state.currentChat
-      }
+        id: chatId,
+        title: state.currentChat[0]?.text?.substring(0, 30) || "Nuevo chat",
+        content: state.currentChat,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
-      localStorage.setItem(
-        "history",
-        JSON.stringify([...messages, newChat]),
-      );
+      // Actualizar si ya existe o agregar nuevo
+      const updatedChats = [
+        newChat,
+        ...prevChats.filter(chat => chat.id !== chatId)
+      ];
 
-      // TODO: IMPLEMENTAR GUARDAADO EN BASE DE DATOS EXRPRESS
+      localStorage.setItem("history", JSON.stringify(updatedChats));
 
-      // limpiamos el chat actual
-      state.currentChat = [];
-      return state;
+      return {
+        ...state,
+        messages: updatedChats,
+        currentChat: [],
+        activeChatId: null
+      };
     }
+
     case "@load_messages": {
-      // lee todos los mensajes guardados
-      const history = localStorage.getItem("history");
-      if (!history) {
-        return { messages: [], ...state };
-      }
-      // evitar que el state se sobreescriba
-      state.messages = JSON.parse(history);
-      return { ...state };
+      const history = JSON.parse(localStorage.getItem("history")) || [];
+      return {
+        ...state,
+        messages: history
+      };
     }
-    case "@current_chat": {      
-      // actulizamos el chat actual
-      state.currentChat = action.payload;
-      return { ...state };
+
+    case "@current_chat": {
+      return {
+        ...state,
+        currentChat: action.payload
+      };
     }
+
+    case "@select_chat": {
+      const selectedChat = state.messages.find(chat => chat.id === action.payload);
+      return {
+        ...state,
+        currentChat: selectedChat?.content || [],
+        activeChatId: action.payload
+      };
+    }
+
+    case "@new_chat": {
+      return {
+        ...state,
+        currentChat: [],
+        activeChatId: null
+      };
+    }
+
+    case "@set_loading": {
+      return {
+        ...state,
+        loading: action.payload
+      };
+    }
+
+    case "@set_error": {
+      return {
+        ...state,
+        error: action.payload
+      };
+    }
+
     default: {
       throw new Error(`Unhandled action type: ${action.type}`);
     }
@@ -55,7 +96,23 @@ function globalReducer(state, action) {
 }
 
 function GlobalProvider({ children }) {
-  const [state, dispatch] = React.useReducer(globalReducer, storage);
+  const [state, dispatch] = React.useReducer(globalReducer, initialState);
+
+  // Cargar mensajes al iniciar
+  React.useEffect(() => {
+    dispatch({ type: "@load_messages" });
+  }, []);
+
+  // Persistencia automática cada 30 segundos
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      if (state.currentChat.length > 0) {
+        dispatch({ type: "@save_history" });
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [state.currentChat]);
+
   const value = { state, dispatch };
 
   return (
@@ -68,9 +125,7 @@ function useGlobal() {
   if (context === undefined) {
     throw new Error("useGlobal must be used within a GlobalProvider");
   }
-
   return context;
 }
 
-// eslint-disable-next-line
 export { GlobalProvider, useGlobal };
